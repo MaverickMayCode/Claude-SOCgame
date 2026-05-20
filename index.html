@@ -1,1114 +1,289 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>CYBERDEF — Counter-Hacking Terminal</title>
-<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,300;0,400;0,500;0,700;1,400&family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet">
-<style>
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-:root {
-  --bg:         #050809;
-  --bg2:        #080d10;
-  --panel:      #090f12;
-  --border:     #162028;
-  --green:      #00ff66;
-  --green-dim:  #00883a;
-  --green-dark: #002a14;
-  --red:        #ff2244;
-  --red-dim:    #3a0a12;
-  --amber:      #ffbb00;
-  --amber-dim:  #664a00;
-  --blue:       #00ccff;
-  --text:       #90dba8;
-  --text-dim:   #2e5a3a;
-  --text-faint: #142018;
-}
-
-html, body { height: 100%; background: var(--bg); color: var(--text); font-family: 'JetBrains Mono', monospace; font-size: 13px; overflow: hidden; }
-
-/* Scanlines */
-body::before {
-  content: '';
-  position: fixed; inset: 0; pointer-events: none; z-index: 9999;
-  background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.07) 2px, rgba(0,0,0,0.07) 4px);
-}
-
-/* ── LAYOUT ──────────────────────────────────────── */
-#app { display: grid; grid-template-rows: 46px 1fr; grid-template-columns: 60% 40%; height: 100vh; }
-
-/* ── TOP BAR ─────────────────────────────────────── */
-#topbar {
-  grid-column: 1/-1;
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 0 20px;
-  background: var(--panel); border-bottom: 1px solid var(--border);
-}
-.topbar-title {
-  font-family: 'Orbitron', sans-serif; font-size: 13px; font-weight: 700;
-  color: var(--green); letter-spacing: 4px;
-  text-shadow: 0 0 12px var(--green-dim);
-}
-.topbar-stats { display: flex; gap: 28px; align-items: center; }
-.stat { display: flex; flex-direction: column; align-items: center; gap: 1px; }
-.stat-label { font-size: 9px; letter-spacing: 2px; color: var(--text-dim); text-transform: uppercase; }
-.stat-value { font-family: 'Orbitron', sans-serif; font-size: 13px; font-weight: 700; color: var(--amber); transition: color 0.3s; }
-.stat-value.green { color: var(--green); }
-.stat-value.red   { color: var(--red); }
-
-/* ── LEFT PANEL ──────────────────────────────────── */
-#left-panel { display: flex; flex-direction: column; border-right: 1px solid var(--border); overflow: hidden; }
-
-/* Alert banner */
-#alert-banner {
-  padding: 10px 16px;
-  background: var(--red-dim); border-bottom: 2px solid var(--red);
-  display: none; animation: alertPulse 2s ease-in-out infinite;
-}
-@keyframes alertPulse { 0%,100% { border-color: var(--red); } 50% { border-color: #660022; } }
-.alert-header { display: flex; align-items: center; gap: 10px; margin-bottom: 3px; }
-.alert-badge {
-  font-family: 'Orbitron', sans-serif; font-size: 9px; font-weight: 700;
-  letter-spacing: 2px; color: var(--red); border: 1px solid var(--red);
-  padding: 2px 6px; animation: blink 1s step-end infinite;
-}
-@keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0; } }
-.alert-sid  { font-size: 10px; color: #883344; letter-spacing: 2px; font-weight: 700; }
-.alert-title { font-size: 13px; font-weight: 700; color: #fff; }
-.alert-body  { font-size: 11px; color: #ffaaaa; line-height: 1.7; }
-.hl { color: #ffdd55; font-weight: 700; }
-
-/* Terminal */
-#terminal {
-  flex: 1; overflow-y: auto; padding: 12px 16px;
-  background: var(--bg); font-size: 12px; line-height: 1.75;
-  scrollbar-width: thin; scrollbar-color: var(--border) transparent;
-}
-#terminal::-webkit-scrollbar { width: 4px; }
-#terminal::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
-.tl { margin: 0; word-break: break-all; white-space: pre-wrap; }
-.tl-prompt  { color: var(--green); }
-.tl-success { color: var(--green); }
-.tl-error   { color: var(--red); }
-.tl-warn    { color: var(--amber); }
-.tl-dim     { color: var(--text-dim); }
-.tl-system  { color: var(--blue); font-style: italic; }
-.tl-output  { color: var(--text); }
-
-/* Input row */
-#input-row {
-  display: flex; align-items: center; gap: 8px;
-  padding: 8px 16px; background: var(--panel); border-top: 1px solid var(--border);
-}
-.prompt-str { color: var(--green); font-weight: 700; white-space: nowrap; font-size: 13px; }
-#cmd-input {
-  flex: 1; background: transparent; border: none; outline: none;
-  color: var(--green); font-family: 'JetBrains Mono', monospace; font-size: 13px;
-  caret-color: var(--green);
-}
-#cmd-input::placeholder { color: var(--text-faint); }
-.input-hint-label { font-size: 9px; color: var(--text-dim); white-space: nowrap; letter-spacing: 1px; }
-
-/* ── RIGHT PANEL ─────────────────────────────────── */
-#right-panel { display: flex; flex-direction: column; overflow: hidden; }
-.panel-tabs { display: flex; background: var(--panel); border-bottom: 1px solid var(--border); }
-.panel-tab {
-  flex: 1; padding: 13px 0; text-align: center; font-size: 10px;
-  letter-spacing: 2px; text-transform: uppercase; cursor: pointer;
-  color: var(--text-dim); border-bottom: 2px solid transparent; transition: all .2s;
-}
-.panel-tab:hover { color: var(--text); }
-.panel-tab.active { color: var(--green); border-bottom-color: var(--green); }
-
-.panel-content {
-  flex: 1; overflow-y: auto; padding: 16px;
-  scrollbar-width: thin; scrollbar-color: var(--border) transparent;
-}
-.panel-content::-webkit-scrollbar { width: 4px; }
-.panel-content::-webkit-scrollbar-thumb { background: var(--border); }
-
-.tab-pane { display: none; }
-.tab-pane.active { display: block; }
-
-/* Mission panel */
-.sec-label { font-size: 9px; letter-spacing: 2px; text-transform: uppercase; color: var(--text-dim); margin-bottom: 8px; }
-#mission-title { font-family: 'Orbitron', sans-serif; font-size: 12px; color: var(--amber); margin-bottom: 4px; }
-#mission-meta  { font-size: 10px; color: var(--text-dim); margin-bottom: 16px; }
-
-.progress-wrap { height: 2px; background: var(--border); margin-bottom: 12px; }
-.progress-fill  { height: 100%; background: var(--green); transition: width .5s ease; }
-
-.step-item { padding: 10px 12px; border: 1px solid var(--border); margin-bottom: 8px; font-size: 11px; line-height: 1.65; }
-.step-item.pending { border-color: var(--border); color: var(--text-dim); }
-.step-item.active  { border-color: var(--amber); color: var(--text); background: rgba(255,187,0,.04); }
-.step-item.done    { border-color: var(--green-dim); color: var(--green-dim); }
-.step-num { font-family: 'Orbitron', sans-serif; font-size: 9px; margin-bottom: 4px; letter-spacing: 1px; }
-
-.hint-btn {
-  display: block; width: 100%; margin-top: 14px; padding: 9px 14px;
-  background: transparent; border: 1px solid var(--amber-dim); color: var(--amber);
-  font-family: 'JetBrains Mono', monospace; font-size: 11px; cursor: pointer;
-  letter-spacing: 1px; text-align: left; transition: all .2s;
-}
-.hint-btn:hover { background: rgba(255,187,0,.08); border-color: var(--amber); }
-.hint-display {
-  margin-top: 8px; padding: 10px 12px;
-  background: rgba(255,187,0,.05); border-left: 2px solid var(--amber);
-  font-size: 11px; color: var(--amber); display: none; line-height: 1.6;
-}
-
-/* Docs */
-.doc-section { margin-bottom: 24px; }
-.doc-section-title {
-  font-family: 'Orbitron', sans-serif; font-size: 10px; color: var(--blue);
-  letter-spacing: 2px; margin-bottom: 10px; padding-bottom: 6px;
-  border-bottom: 1px solid var(--border);
-}
-.doc-cmd { margin-bottom: 14px; }
-.doc-cmd-name { color: var(--green); font-weight: 700; font-size: 12px; margin-bottom: 3px; }
-.doc-cmd-desc { color: var(--text-dim); font-size: 11px; line-height: 1.65; margin-bottom: 5px; }
-.doc-example {
-  color: var(--text-dim); font-size: 10px; padding: 3px 8px;
-  background: rgba(0,255,102,.03); border-left: 1px solid var(--green-dim);
-  margin-bottom: 2px;
-}
-
-/* History */
-.history-item { padding: 12px; border: 1px solid var(--border); margin-bottom: 8px; }
-.history-item.done { border-color: var(--green-dim); }
-.history-id    { font-family: 'Orbitron', sans-serif; font-size: 9px; color: var(--text-dim); margin-bottom: 3px; }
-.history-title { font-size: 12px; font-weight: 700; color: var(--text); margin-bottom: 2px; }
-.history-earn  { font-size: 11px; color: var(--amber); }
-.history-empty { color: var(--text-dim); font-size: 11px; text-align: center; padding: 24px 0; }
-
-/* ── WELCOME SCREEN ──────────────────────────────── */
-#welcome {
-  position: fixed; inset: 0; background: var(--bg); z-index: 400;
-  display: flex; justify-content: center; align-items: center;
-  flex-direction: column; gap: 20px; text-align: center; padding: 40px;
-}
-.w-ascii {
-  font-size: 11px; line-height: 1.25; color: var(--green);
-  text-shadow: 0 0 8px var(--green-dim); letter-spacing: 1px;
-  user-select: none;
-}
-.w-title {
-  font-family: 'Orbitron', sans-serif; font-size: 22px; font-weight: 900;
-  color: var(--green); letter-spacing: 6px;
-  text-shadow: 0 0 20px var(--green-dim), 0 0 40px #001a0d;
-}
-.w-sub { font-size: 12px; color: var(--text-dim); max-width: 520px; line-height: 1.9; }
-.w-features { display: flex; gap: 36px; font-size: 10px; color: var(--text-dim); letter-spacing: 1px; }
-.w-feat { display: flex; flex-direction: column; align-items: center; gap: 6px; }
-.w-feat-icon { font-size: 22px; }
-.w-start {
-  padding: 14px 44px; background: transparent;
-  border: 2px solid var(--green); color: var(--green);
-  font-family: 'Orbitron', sans-serif; font-size: 13px;
-  letter-spacing: 5px; cursor: pointer; transition: all .3s;
-  animation: glowPulse 2.2s ease-in-out infinite;
-}
-.w-start:hover { background: var(--green); color: var(--bg); }
-@keyframes glowPulse {
-  0%,100% { box-shadow: 0 0 8px var(--green-dim); }
-  50%      { box-shadow: 0 0 24px var(--green), 0 0 48px var(--green-dim); }
-}
-
-/* ── GAME OVER ───────────────────────────────────── */
-#gameover {
-  position: fixed; inset: 0; background: rgba(0,0,0,.92); z-index: 500;
-  display: none; justify-content: center; align-items: center;
-  flex-direction: column; gap: 18px; text-align: center;
-}
-#gameover.show { display: flex; }
-.go-title {
-  font-family: 'Orbitron', sans-serif; font-size: 32px; font-weight: 900;
-  color: var(--green); letter-spacing: 6px;
-  text-shadow: 0 0 30px var(--green), 0 0 60px var(--green-dim);
-}
-.go-score { font-family: 'Orbitron', sans-serif; font-size: 22px; color: var(--amber); }
-.go-detail { color: var(--text-dim); font-size: 12px; line-height: 2.2; }
-.go-btn {
-  margin-top: 8px; padding: 13px 36px;
-  background: transparent; border: 2px solid var(--green); color: var(--green);
-  font-family: 'Orbitron', sans-serif; font-size: 13px;
-  letter-spacing: 4px; cursor: pointer; transition: all .3s;
-}
-.go-btn:hover { background: var(--green); color: var(--bg); }
-</style>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>SOC_ANALYST_1_STUDY_TERMINAL</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Share+Tech+Mono&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="style.css" />
 </head>
 <body>
+<div class="scanlines"></div>
+<div class="grid-overlay"></div>
 
-<!-- ═══════ WELCOME ═══════ -->
-<div id="welcome">
-  <pre class="w-ascii">
- ██████╗██╗   ██╗██████╗ ███████╗██████╗ ██████╗ ███████╗███████╗
-██╔════╝╚██╗ ██╔╝██╔══██╗██╔════╝██╔══██╗██╔══██╗██╔════╝██╔════╝
-██║      ╚████╔╝ ██████╔╝█████╗  ██████╔╝██║  ██║█████╗  █████╗  
-██║       ╚██╔╝  ██╔══██╗██╔══╝  ██╔══██╗██║  ██║██╔══╝  ██╔══╝  
-╚██████╗   ██║   ██████╔╝███████╗██║  ██║██████╔╝███████╗██║     
- ╚═════╝   ╚═╝   ╚═════╝ ╚══════╝╚═╝  ╚═╝╚═════╝ ╚══════╝╚═╝     </pre>
-  <div class="w-title">COUNTER-HACKING TERMINAL</div>
-  <div class="w-sub">A real-world cybersecurity training simulator. Respond to live hacking incidents by typing actual Linux security commands. Stop attackers. Earn bounty. Learn as you go.</div>
-  <div class="w-features">
-    <div class="w-feat"><span class="w-feat-icon">🖥️</span><span>REAL CLI COMMANDS</span></div>
-    <div class="w-feat"><span class="w-feat-icon">💰</span><span>EARN BOUNTY</span></div>
-    <div class="w-feat"><span class="w-feat-icon">📖</span><span>BUILT-IN DOCS</span></div>
-    <div class="w-feat"><span class="w-feat-icon">⚡</span><span>5 SCENARIOS</span></div>
+<header class="terminal-header">
+  <div class="header-bar">
+    <span class="prompt-dot red"></span>
+    <span class="prompt-dot amber"></span>
+    <span class="prompt-dot green"></span>
+    <span class="header-title">SOC_ANALYST_1_STUDY_TERMINAL <span class="cursor">█</span></span>
+    <span class="header-status" id="header-status">SESSION ACTIVE</span>
   </div>
-  <button class="w-start" onclick="startGame()">[ INITIALIZE ]</button>
-</div>
+  <nav class="tab-nav" id="tab-nav">
+    <button class="tab-btn active" data-view="dashboard">/dashboard</button>
+    <button class="tab-btn" data-view="daily-goals">/daily-goals</button>
+    <button class="tab-btn" data-view="flashcards">/flashcards</button>
+    <button class="tab-btn" data-view="quiz">/quiz</button>
+    <button class="tab-btn" data-view="acronyms">/acronyms</button>
+    <button class="tab-btn" data-view="commands">/commands</button>
+    <button class="tab-btn" data-view="alerts">/alerts</button>
+    <button class="tab-btn" data-view="missed-review">/missed-review</button>
+  </nav>
+</header>
 
-<!-- ═══════ GAME OVER ═══════ -->
-<div id="gameover">
-  <div class="go-title">MISSION COMPLETE</div>
-  <div id="go-score" class="go-score"></div>
-  <div id="go-detail" class="go-detail"></div>
-  <button class="go-btn" onclick="resetGame()">[ PLAY AGAIN ]</button>
-</div>
+<main class="terminal-main">
 
-<!-- ═══════ MAIN APP ═══════ -->
-<div id="app">
-
-  <!-- Top bar -->
-  <div id="topbar">
-    <span class="topbar-title">⚡ CYBERDEF //</span>
-    <div class="topbar-stats">
-      <div class="stat">
-        <span class="stat-label">Bounty</span>
-        <span class="stat-value green" id="s-money">$0</span>
+  <!-- ===================== DASHBOARD ===================== -->
+  <section class="view active" id="view-dashboard">
+    <div class="boot-line">&gt; ACCESSING KNOWLEDGE BASE<span class="cursor">█</span></div>
+    <h1 class="view-title">// DASHBOARD</h1>
+    <div class="panel-grid">
+      <div class="panel">
+        <div class="panel-label">[LIFETIME] cards_studied</div>
+        <div class="panel-value" id="stat-total">0</div>
       </div>
-      <div class="stat">
-        <span class="stat-label">Incidents</span>
-        <span class="stat-value" id="s-incs">0 / 5</span>
+      <div class="panel">
+        <div class="panel-label">[REVIEW_QUEUE] missed_cards</div>
+        <div class="panel-value warn" id="stat-missed">0</div>
       </div>
-      <div class="stat">
-        <span class="stat-label">Hints</span>
-        <span class="stat-value red" id="s-hints">0</span>
+      <div class="panel">
+        <div class="panel-label">[QUIZ] best_score</div>
+        <div class="panel-value" id="stat-best">--</div>
       </div>
-      <div class="stat">
-        <span class="stat-label">Threat</span>
-        <span class="stat-value red" id="s-threat">CRITICAL</span>
+      <div class="panel">
+        <div class="panel-label">[SESSION] current_streak</div>
+        <div class="panel-value cyan" id="stat-session">0</div>
       </div>
     </div>
-  </div>
 
-  <!-- Left: terminal -->
-  <div id="left-panel">
-    <div id="alert-banner">
-      <div class="alert-header">
-        <span class="alert-badge">⚠ ALERT</span>
-        <span class="alert-sid" id="a-sid"></span>
-        <span class="alert-title" id="a-title"></span>
+    <div class="panel wide">
+      <div class="panel-label">[ANALYSIS] weakest_categories</div>
+      <ul class="weak-list" id="weak-list"><li class="muted">No data yet. Start studying to populate.</li></ul>
+    </div>
+
+    <div class="panel wide">
+      <div class="panel-label">[TODAY] daily_objectives_summary</div>
+      <div id="daily-summary" class="daily-summary"></div>
+      <button class="ghost-btn" data-jump="daily-goals">&gt; OPEN DAILY OBJECTIVES</button>
+    </div>
+
+    <div class="panel wide danger-panel">
+      <div class="panel-label">[DANGER] reset_zone</div>
+      <button class="danger-btn" id="reset-lifetime">&gt; WIPE LIFETIME PROGRESS</button>
+      <p class="muted small">This clears all localStorage. There is no undo.</p>
+    </div>
+  </section>
+
+  <!-- ===================== DAILY GOALS ===================== -->
+  <section class="view" id="view-daily-goals">
+    <div class="boot-line">&gt; LOADING DAILY OBJECTIVES<span class="cursor">█</span></div>
+    <h1 class="view-title">// TODAY'S SOC TRAINING OBJECTIVES</h1>
+    <div class="panel wide">
+      <div class="panel-label" id="daily-date-label">[DATE] --</div>
+      <div class="overall-progress">
+        <div class="overall-label">OVERALL_COMPLETION: <span id="overall-pct">0%</span></div>
+        <div class="bar"><div class="bar-fill" id="overall-bar"></div></div>
       </div>
-      <div class="alert-body" id="a-body"></div>
+      <div id="all-complete-msg" class="all-complete hidden">&gt; DAILY SOC TRAINING COMPLETE — NICE WORK, ANALYST.</div>
     </div>
-    <div id="terminal">
-      <p class="tl tl-dim">Initializing CYBERDEF terminal v2.4.1 ...</p>
-    </div>
-    <div id="input-row">
-      <span class="prompt-str">defender@cyberdef:~$&nbsp;</span>
-      <input type="text" id="cmd-input" placeholder="type a command and press ENTER…"
-             autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
-      <span class="input-hint-label">↑↓ history</span>
-    </div>
-  </div>
 
-  <!-- Right: info panel -->
-  <div id="right-panel">
-    <div class="panel-tabs">
-      <div class="panel-tab active" id="tab-btn-mission" onclick="switchTab('mission',this)">MISSION</div>
-      <div class="panel-tab" id="tab-btn-docs"    onclick="switchTab('docs',this)">DOCS</div>
-      <div class="panel-tab" id="tab-btn-history" onclick="switchTab('history',this)">LOG</div>
-    </div>
-    <div class="panel-content">
+    <div class="goals-list" id="goals-list"></div>
 
-      <!-- MISSION -->
-      <div class="tab-pane active" id="tab-mission">
-        <div class="sec-label" style="margin-bottom:4px;">Current Incident</div>
-        <div id="mission-title"></div>
-        <div id="mission-meta"></div>
-        <div class="sec-label">Response Steps</div>
-        <div class="progress-wrap"><div class="progress-fill" id="step-prog" style="width:0%"></div></div>
-        <div id="step-list"></div>
-        <button class="hint-btn" onclick="useHint()">💡 REQUEST HINT (free)</button>
-        <div class="hint-display" id="hint-box"></div>
+    <div class="panel wide">
+      <div class="panel-label">[CONFIG] edit_targets</div>
+      <div class="goals-edit" id="goals-edit"></div>
+      <div class="row">
+        <button class="ghost-btn" id="save-goals">&gt; SAVE TARGETS</button>
+        <button class="danger-btn" id="reset-today">&gt; RESET TODAY'S PROGRESS</button>
       </div>
+    </div>
+  </section>
 
-      <!-- DOCS -->
-      <div class="tab-pane" id="tab-docs">
+  <!-- ===================== FLASHCARDS ===================== -->
+  <section class="view" id="view-flashcards">
+    <div class="boot-line">&gt; FLASHCARD MODULE READY<span class="cursor">█</span></div>
+    <h1 class="view-title">// FLASHCARDS</h1>
 
-        <div class="doc-section">
-          <div class="doc-section-title">LOG ANALYSIS</div>
-          <div class="doc-cmd">
-            <div class="doc-cmd-name">grep</div>
-            <div class="doc-cmd-desc">Search for text patterns inside files. Your first tool for log forensics.</div>
-            <div class="doc-example">grep 'Failed password' /var/log/auth.log</div>
-            <div class="doc-example">grep -i 'error' /var/log/syslog | tail -50</div>
-            <div class="doc-example">grep '203.0.113.42' /var/log/auth.log | wc -l</div>
-          </div>
-          <div class="doc-cmd">
-            <div class="doc-cmd-name">journalctl</div>
-            <div class="doc-cmd-desc">Query the systemd journal. More structured than raw log files.</div>
-            <div class="doc-example">journalctl -u ssh --since "1 hour ago"</div>
-            <div class="doc-example">journalctl -p err -n 50</div>
-          </div>
-          <div class="doc-cmd">
-            <div class="doc-cmd-name">last / lastb</div>
-            <div class="doc-cmd-desc">Show recent login history. lastb shows failed logins specifically.</div>
-            <div class="doc-example">last -n 30</div>
-            <div class="doc-example">lastb | head -20</div>
-          </div>
+    <div class="panel wide">
+      <div class="panel-label">[FILTER] select_category</div>
+      <div class="category-picker" id="category-picker"></div>
+    </div>
+
+    <div class="card-stage" id="flashcard-stage">
+      <div class="study-card" id="study-card">
+        <div class="card-meta">
+          <span class="badge" id="card-category">--</span>
+          <span class="badge alt" id="card-difficulty">--</span>
+          <span class="card-count" id="card-count">0 / 0</span>
         </div>
+        <div class="card-prompt" id="card-prompt">Select a category to begin.</div>
+        <div class="card-answer hidden" id="card-answer"></div>
+        <div class="card-tags" id="card-tags"></div>
+      </div>
+      <div class="card-controls">
+        <button class="ctrl-btn cyan-btn" id="reveal-btn">&gt; REVEAL [SPACE]</button>
+        <button class="ctrl-btn green-btn" id="got-it-btn" disabled>&gt; GOT IT [1]</button>
+        <button class="ctrl-btn red-btn" id="missed-btn" disabled>&gt; MISSED IT [2]</button>
+        <button class="ctrl-btn amber-btn" id="next-btn">&gt; NEXT [ENTER]</button>
+      </div>
+      <p class="muted small">Shortcuts: SPACE = reveal · 1 = got it · 2 = missed it · ENTER = next</p>
+    </div>
+  </section>
 
-        <div class="doc-section">
-          <div class="doc-section-title">NETWORK ANALYSIS</div>
-          <div class="doc-cmd">
-            <div class="doc-cmd-name">ss</div>
-            <div class="doc-cmd-desc">Modern socket statistics — faster and richer than netstat.</div>
-            <div class="doc-example">ss -tuln            # all listeners</div>
-            <div class="doc-example">ss -tulpn           # listeners with process names</div>
-            <div class="doc-example">ss -tulpn | grep 4444</div>
-          </div>
-          <div class="doc-cmd">
-            <div class="doc-cmd-name">netstat</div>
-            <div class="doc-cmd-desc">Show connections, routing tables, and port listeners.</div>
-            <div class="doc-example">netstat -tuln</div>
-            <div class="doc-example">netstat -ntu | awk '{print $5}' | cut -d: -f1 | sort | uniq -c | sort -rn</div>
-          </div>
-          <div class="doc-cmd">
-            <div class="doc-cmd-name">lsof</div>
-            <div class="doc-cmd-desc">List open files — sockets included. Great for tying processes to ports.</div>
-            <div class="doc-example">lsof -i              # all network connections</div>
-            <div class="doc-example">lsof -i :4444        # what's on port 4444</div>
-            <div class="doc-example">lsof -p 6631 -i      # connections for PID</div>
-          </div>
-          <div class="doc-cmd">
-            <div class="doc-cmd-name">tcpdump</div>
-            <div class="doc-cmd-desc">Capture and inspect network packets in real time.</div>
-            <div class="doc-example">tcpdump -i eth0 -n port 80</div>
-            <div class="doc-example">tcpdump -i any host 203.0.113.42 -w capture.pcap</div>
-          </div>
-        </div>
+  <!-- ===================== QUIZ ===================== -->
+  <section class="view" id="view-quiz">
+    <div class="boot-line">&gt; INITIALIZING QUIZ PROTOCOL<span class="cursor">█</span></div>
+    <h1 class="view-title">// QUIZ MODE</h1>
+    <div class="panel wide" id="quiz-setup">
+      <div class="panel-label">[CONFIG] quiz_parameters</div>
+      <label class="inline-row">CATEGORY: <select id="quiz-category"></select></label>
+      <label class="inline-row">QUESTION_COUNT: <select id="quiz-length">
+        <option value="5">5</option>
+        <option value="10" selected>10</option>
+        <option value="15">15</option>
+        <option value="20">20</option>
+      </select></label>
+      <button class="ctrl-btn green-btn" id="start-quiz">&gt; START QUIZ</button>
+    </div>
 
-        <div class="doc-section">
-          <div class="doc-section-title">FIREWALL & ACCESS CONTROL</div>
-          <div class="doc-cmd">
-            <div class="doc-cmd-name">iptables</div>
-            <div class="doc-cmd-desc">Linux kernel firewall. Powerful packet filtering and NAT.</div>
-            <div class="doc-example">iptables -A INPUT -s 203.0.113.42 -j DROP</div>
-            <div class="doc-example">iptables -A INPUT -p tcp --dport 80 -m connlimit --connlimit-above 50 -j DROP</div>
-            <div class="doc-example">iptables -A INPUT -p tcp --dport 80 -m limit --limit 100/min -j ACCEPT</div>
-            <div class="doc-example">iptables -L -n -v   # list all rules</div>
-          </div>
-          <div class="doc-cmd">
-            <div class="doc-cmd-name">ufw</div>
-            <div class="doc-cmd-desc">Uncomplicated Firewall — friendlier iptables front-end.</div>
-            <div class="doc-example">ufw deny from 203.0.113.42</div>
-            <div class="doc-example">ufw limit ssh</div>
-            <div class="doc-example">ufw status verbose</div>
-          </div>
-          <div class="doc-cmd">
-            <div class="doc-cmd-name">fail2ban-client</div>
-            <div class="doc-cmd-desc">Manage fail2ban — automatic IP banning after repeated failures.</div>
-            <div class="doc-example">fail2ban-client status sshd</div>
-            <div class="doc-example">fail2ban-client set sshd banip 203.0.113.42</div>
-          </div>
-        </div>
+    <div class="hidden" id="quiz-active">
+      <div class="quiz-progress">
+        <span id="quiz-pos">Q 1 / 10</span>
+        <span id="quiz-score">SCORE: 0</span>
+      </div>
+      <div class="study-card">
+        <div class="card-prompt" id="quiz-question"></div>
+        <div class="quiz-options" id="quiz-options"></div>
+        <div class="quiz-feedback" id="quiz-feedback"></div>
+      </div>
+      <button class="ctrl-btn amber-btn hidden" id="quiz-next">&gt; NEXT QUESTION [ENTER]</button>
+    </div>
 
-        <div class="doc-section">
-          <div class="doc-section-title">PROCESS MANAGEMENT</div>
-          <div class="doc-cmd">
-            <div class="doc-cmd-name">ps</div>
-            <div class="doc-cmd-desc">Snapshot of running processes with owner, CPU, mem, and command.</div>
-            <div class="doc-example">ps aux</div>
-            <div class="doc-example">ps aux | grep suspicious_name</div>
-            <div class="doc-example">ps aux --sort=-%cpu | head -10</div>
-          </div>
-          <div class="doc-cmd">
-            <div class="doc-cmd-name">kill / pkill</div>
-            <div class="doc-cmd-desc">Terminate processes. kill by PID; pkill by name. Signal 9 = force kill.</div>
-            <div class="doc-example">kill -9 4872</div>
-            <div class="doc-example">pkill -9 kworker64</div>
-          </div>
-          <div class="doc-cmd">
-            <div class="doc-cmd-name">top / htop</div>
-            <div class="doc-cmd-desc">Live interactive process monitor. Great for spotting CPU hogs.</div>
-            <div class="doc-example">top -u root</div>
-            <div class="doc-example">htop</div>
-          </div>
-        </div>
-
-        <div class="doc-section">
-          <div class="doc-section-title">FILE SYSTEM FORENSICS</div>
-          <div class="doc-cmd">
-            <div class="doc-cmd-name">find</div>
-            <div class="doc-cmd-desc">Search the filesystem by name, time, permissions, owner. Indispensable for hunting malware.</div>
-            <div class="doc-example">find /tmp -name ".*" -type f</div>
-            <div class="doc-example">find / -newer /tmp/ref -type f 2>/dev/null</div>
-            <div class="doc-example">find /tmp -name "kworker64" -delete</div>
-          </div>
-          <div class="doc-cmd">
-            <div class="doc-cmd-name">chattr / chmod</div>
-            <div class="doc-cmd-desc">Modify file attributes. chattr +i makes a file immutable — even root can't overwrite it.</div>
-            <div class="doc-example">chattr +i /etc/passwd</div>
-            <div class="doc-example">chmod 600 /etc/ssh/sshd_config</div>
-          </div>
-        </div>
-
-        <div class="doc-section">
-          <div class="doc-section-title">USER & SESSION MANAGEMENT</div>
-          <div class="doc-cmd">
-            <div class="doc-cmd-name">who / w</div>
-            <div class="doc-cmd-desc">Show who is logged in right now. w includes what they are running.</div>
-            <div class="doc-example">who</div>
-            <div class="doc-example">w</div>
-          </div>
-          <div class="doc-cmd">
-            <div class="doc-cmd-name">usermod / passwd</div>
-            <div class="doc-cmd-desc">Modify user accounts. Lock compromised accounts instantly.</div>
-            <div class="doc-example">usermod -L username     # lock account</div>
-            <div class="doc-example">passwd -l username      # alternative lock</div>
-          </div>
-          <div class="doc-cmd">
-            <div class="doc-cmd-name">crontab / systemctl</div>
-            <div class="doc-cmd-desc">Attackers use cron jobs and services for persistence. Always check after eviction.</div>
-            <div class="doc-example">crontab -l -u root</div>
-            <div class="doc-example">crontab -r -u root      # remove all cron jobs for user</div>
-            <div class="doc-example">systemctl list-units --type=service</div>
-            <div class="doc-example">ls /etc/cron.d/  &&  ls /etc/cron.daily/</div>
-          </div>
-        </div>
-
-        <div class="doc-section">
-          <div class="doc-section-title">SSH HARDENING</div>
-          <div class="doc-cmd">
-            <div class="doc-cmd-name">sshd_config</div>
-            <div class="doc-cmd-desc">Main SSH daemon config. Tighten it to limit attack surface.</div>
-            <div class="doc-example">grep MaxAuthTries /etc/ssh/sshd_config</div>
-            <div class="doc-example">sed -i 's/MaxAuthTries 6/MaxAuthTries 3/' /etc/ssh/sshd_config</div>
-            <div class="doc-example">systemctl restart sshd</div>
-          </div>
-          <div class="doc-cmd">
-            <div class="doc-cmd-name">authorized_keys</div>
-            <div class="doc-cmd-desc">Lists SSH public keys allowed to login without a password. Attackers love to inject keys here.</div>
-            <div class="doc-example">cat /root/.ssh/authorized_keys</div>
-            <div class="doc-example">sed -i '/attacker/d' /root/.ssh/authorized_keys</div>
-          </div>
-        </div>
-
-      </div><!-- /docs -->
-
-      <!-- HISTORY -->
-      <div class="tab-pane" id="tab-history">
-        <div id="history-list">
-          <p class="history-empty">No incidents resolved yet.</p>
+    <div class="hidden" id="quiz-results">
+      <div class="panel wide">
+        <div class="panel-label">[REPORT] quiz_results</div>
+        <div class="result-score" id="result-score"></div>
+        <div id="result-summary"></div>
+        <div class="row">
+          <button class="ctrl-btn cyan-btn" id="retry-missed">&gt; RETRY MISSED ONLY</button>
+          <button class="ctrl-btn amber-btn" id="new-quiz">&gt; NEW QUIZ</button>
         </div>
       </div>
+    </div>
+  </section>
 
-    </div><!-- /panel-content -->
-  </div><!-- /right-panel -->
-</div><!-- /app -->
+  <!-- ===================== ACRONYMS ===================== -->
+  <section class="view" id="view-acronyms">
+    <div class="boot-line">&gt; ACRONYM DRILL LOADED<span class="cursor">█</span></div>
+    <h1 class="view-title">// ACRONYM DRILL</h1>
+    <div class="card-stage">
+      <div class="study-card">
+        <div class="card-meta">
+          <span class="badge">ACRONYM</span>
+          <span class="card-count" id="acro-count">0 / 0</span>
+        </div>
+        <div class="acronym-big" id="acro-term">--</div>
+        <div class="card-prompt small">What does it stand for? Why does it matter?</div>
+        <div class="card-answer hidden" id="acro-answer"></div>
+      </div>
+      <div class="card-controls">
+        <button class="ctrl-btn cyan-btn" id="acro-reveal">&gt; REVEAL [SPACE]</button>
+        <button class="ctrl-btn green-btn" id="acro-got" disabled>&gt; GOT IT [1]</button>
+        <button class="ctrl-btn red-btn" id="acro-missed" disabled>&gt; MISSED [2]</button>
+        <button class="ctrl-btn amber-btn" id="acro-next">&gt; NEXT [ENTER]</button>
+      </div>
+    </div>
+  </section>
 
-<script>
-// ═══════════════════════════════════════════════════════
-// SCENARIOS
-// Each step: instruction, hint, isValid(), output[]
-// ═══════════════════════════════════════════════════════
-const SCENARIOS = [
-  {
-    id: "SIR-001",
-    title: "SSH Brute Force Attack",
-    severity: "CRITICAL",
-    reward: 500,
-    briefing: `IDS alert: IP <span class="hl">203.0.113.42</span> has made <span class="hl">1,247 failed SSH login attempts</span> in the last 90 seconds. Dictionary attack against root and common accounts. Service at risk of compromise.`,
-    steps: [
-      {
-        instruction: "Examine authentication logs to confirm the attack and identify the source.",
-        hint: "sudo grep 'Failed password' /var/log/auth.log | grep 203.0.113.42",
-        isValid: cmd => {
-          const c = cmd.toLowerCase();
-          return (c.includes('auth.log') && (c.includes('grep') || c.includes('cat'))) ||
-                 (c.includes('journalctl') && c.includes('ssh')) ||
-                 (c.includes('fail2ban-client') && c.includes('status'));
-        },
-        output: [
-          {t:'dim',    v:'$ sudo grep \'Failed password\' /var/log/auth.log | grep 203.0.113.42'},
-          {t:'warn',   v:'May 19 09:14:01 srv sshd[2341]: Failed password for root from 203.0.113.42 port 52341 ssh2'},
-          {t:'warn',   v:'May 19 09:14:02 srv sshd[2342]: Failed password for admin from 203.0.113.42 port 52342 ssh2'},
-          {t:'warn',   v:'May 19 09:14:03 srv sshd[2343]: Failed password for ubuntu from 203.0.113.42 port 52343 ssh2'},
-          {t:'dim',    v:'[... 1,244 more matching entries ...]'},
-          {t:'success',v:'✓ Confirmed: 1,247 failed login attempts from 203.0.113.42'},
-        ],
-        reward: 150,
-      },
-      {
-        instruction: "Block the attacking IP. Drop all inbound traffic from 203.0.113.42.",
-        hint: "sudo iptables -A INPUT -s 203.0.113.42 -j DROP",
-        isValid: cmd => {
-          const c = cmd.toLowerCase();
-          return (c.includes('iptables') && c.includes('203.0.113.42') && (c.includes('drop') || c.includes('reject'))) ||
-                 (c.includes('fail2ban-client') && c.includes('banip') && c.includes('203.0.113.42')) ||
-                 (c.includes('ufw') && c.includes('deny') && c.includes('203.0.113.42'));
-        },
-        output: [
-          {t:'dim',    v:'$ sudo iptables -A INPUT -s 203.0.113.42 -j DROP'},
-          {t:'success',v:'✓ Firewall rule added'},
-          {t:'dim',    v:'Chain INPUT — DROP  all  --  203.0.113.42  0.0.0.0/0'},
-          {t:'success',v:'✓ All packets from 203.0.113.42 are now silently dropped'},
-        ],
-        reward: 175,
-      },
-      {
-        instruction: "Harden SSH: check MaxAuthTries to reduce future attack surface.",
-        hint: "sudo grep MaxAuthTries /etc/ssh/sshd_config",
-        isValid: cmd => {
-          const c = cmd.toLowerCase();
-          return (c.includes('sshd_config') && (c.includes('grep') || c.includes('cat') || c.includes('nano') || c.includes('vi') || c.includes('sed'))) ||
-                 c.includes('maxauthtries') ||
-                 (c.includes('fail2ban') && (c.includes('jail') || c.includes('conf')));
-        },
-        output: [
-          {t:'dim',    v:'$ sudo grep MaxAuthTries /etc/ssh/sshd_config'},
-          {t:'warn',   v:'MaxAuthTries 6   # default — too permissive'},
-          {t:'dim',    v:'$ sudo sed -i \'s/MaxAuthTries 6/MaxAuthTries 3/\' /etc/ssh/sshd_config'},
-          {t:'dim',    v:'$ sudo systemctl restart sshd'},
-          {t:'success',v:'✓ MaxAuthTries reduced to 3. SSH daemon restarted.'},
-        ],
-        reward: 175,
-      },
-    ]
-  },
+  <!-- ===================== COMMANDS ===================== -->
+  <section class="view" id="view-commands">
+    <div class="boot-line">&gt; COMMAND DRILL LOADED<span class="cursor">█</span></div>
+    <h1 class="view-title">// COMMAND DRILL</h1>
+    <div class="panel wide">
+      <div class="panel-label">[FILTER] os_selector</div>
+      <div class="row" id="os-picker">
+        <button class="ghost-btn active" data-os="all">ALL</button>
+        <button class="ghost-btn" data-os="linux">LINUX</button>
+        <button class="ghost-btn" data-os="windows">WINDOWS</button>
+      </div>
+    </div>
+    <div class="card-stage">
+      <div class="study-card">
+        <div class="card-meta">
+          <span class="badge" id="cmd-os">--</span>
+          <span class="card-count" id="cmd-count">0 / 0</span>
+        </div>
+        <div class="command-big" id="cmd-name">--</div>
+        <div class="card-prompt small">What does this do? Why should a SOC analyst care?</div>
+        <div class="card-answer hidden" id="cmd-answer"></div>
+      </div>
+      <div class="card-controls">
+        <button class="ctrl-btn cyan-btn" id="cmd-reveal">&gt; REVEAL [SPACE]</button>
+        <button class="ctrl-btn green-btn" id="cmd-got" disabled>&gt; GOT IT [1]</button>
+        <button class="ctrl-btn red-btn" id="cmd-missed" disabled>&gt; MISSED [2]</button>
+        <button class="ctrl-btn amber-btn" id="cmd-next">&gt; NEXT [ENTER]</button>
+      </div>
+    </div>
+  </section>
 
-  {
-    id: "SIR-002",
-    title: "Cryptomining Malware",
-    severity: "HIGH",
-    reward: 400,
-    briefing: `System monitor alert: process <span class="hl">'kworker64'</span> (PID <span class="hl">4872</span>) consuming <span class="hl">99% CPU</span>. Name mimics a kernel thread but it spawned from <span class="hl">/tmp/</span>. Active outbound connection to Monero mining pool detected.`,
-    steps: [
-      {
-        instruction: "Investigate the suspicious process. Confirm it's malicious and see what it's connecting to.",
-        hint: "ps aux | grep kworker64",
-        isValid: cmd => {
-          const c = cmd.toLowerCase();
-          return c.includes('ps aux') || c.includes('ps -aux') || c.includes('ps -ef') ||
-                 (c.includes('lsof') && (c.includes('4872') || c.includes('kworker'))) ||
-                 c.includes('top') || c.includes('htop') ||
-                 (c.includes('cat') && c.includes('/proc/') && c.includes('4872'));
-        },
-        output: [
-          {t:'dim',    v:'$ ps aux | grep kworker64'},
-          {t:'warn',   v:'root  4872 99.1  2.4 524288 49152 ?  R  09:01 847:23 /tmp/.kworker64 -o stratum+tcp://pool.moneroocean.stream:10001'},
-          {t:'warn',   v:'⚠ Binary located in /tmp/ — this is NOT a legitimate kernel process'},
-          {t:'warn',   v:'⚠ Active outbound connection to moneroocean.stream (Monero mining pool)'},
-        ],
-        reward: 100,
-      },
-      {
-        instruction: "Terminate the cryptominer. Its PID is 4872.",
-        hint: "sudo kill -9 4872",
-        isValid: cmd => {
-          const c = cmd.toLowerCase();
-          return (c.includes('kill') && c.includes('4872')) ||
-                 (c.includes('pkill') && c.includes('kworker64'));
-        },
-        output: [
-          {t:'dim',    v:'$ sudo kill -9 4872'},
-          {t:'success',v:'✓ SIGKILL sent to PID 4872'},
-          {t:'success',v:'✓ kworker64 terminated — CPU load: 99% → 2%'},
-          {t:'success',v:'✓ Mining pool connection dropped'},
-        ],
-        reward: 150,
-      },
-      {
-        instruction: "Remove the malicious binary from /tmp/ to prevent re-execution.",
-        hint: "sudo rm -f /tmp/.kworker64",
-        isValid: cmd => {
-          const c = cmd.toLowerCase();
-          return (c.includes('rm') && (c.includes('kworker64') || (c.includes('/tmp/') && c.includes('kworker')))) ||
-                 (c.includes('find') && c.includes('/tmp') && (c.includes('delete') || c.includes('kworker'))) ||
-                 (c.includes('shred') && c.includes('kworker'));
-        },
-        output: [
-          {t:'dim',    v:'$ sudo find /tmp -name ".kworker64" -delete'},
-          {t:'success',v:'✓ Malicious binary deleted: /tmp/.kworker64'},
-          {t:'dim',    v:'$ ls /tmp/.kworker64'},
-          {t:'success',v:'ls: cannot access \'/tmp/.kworker64\': No such file or directory'},
-          {t:'success',v:'✓ Threat eliminated. System resources restored.'},
-        ],
-        reward: 150,
-      },
-    ]
-  },
+  <!-- ===================== ALERTS ===================== -->
+  <section class="view" id="view-alerts">
+    <div class="boot-line">&gt; ALERT-TO-ACTION QUEUE LOADED<span class="cursor">█</span></div>
+    <h1 class="view-title">// ALERT-TO-ACTION</h1>
+    <div class="card-stage">
+      <div class="study-card alert-card">
+        <div class="card-meta">
+          <span class="badge red-badge">ALERT</span>
+          <span class="card-count" id="alert-count">0 / 0</span>
+        </div>
+        <div class="alert-title" id="alert-title">--</div>
+        <div class="card-prompt small">What does this likely mean? What do you investigate first?</div>
+        <div class="card-answer hidden" id="alert-answer"></div>
+      </div>
+      <div class="card-controls">
+        <button class="ctrl-btn cyan-btn" id="alert-reveal">&gt; REVEAL [SPACE]</button>
+        <button class="ctrl-btn green-btn" id="alert-got" disabled>&gt; GOT IT [1]</button>
+        <button class="ctrl-btn red-btn" id="alert-missed" disabled>&gt; MISSED [2]</button>
+        <button class="ctrl-btn amber-btn" id="alert-next">&gt; NEXT [ENTER]</button>
+      </div>
+    </div>
+  </section>
 
-  {
-    id: "SIR-003",
-    title: "Backdoor Port Listener",
-    severity: "CRITICAL",
-    reward: 600,
-    briefing: `Network scan detected an <span class="hl">unknown process listening on port 4444</span> — classic Metasploit/RAT port. Active outbound session established from an unknown TOR exit node. Attacker may have live shell access <span class="hl">right now</span>.`,
-    steps: [
-      {
-        instruction: "Identify which process is listening on port 4444 and obtain its PID.",
-        hint: "sudo ss -tulpn | grep 4444  OR  sudo lsof -i :4444",
-        isValid: cmd => {
-          const c = cmd.toLowerCase();
-          return (c.includes('ss') && (c.includes('4444') || c.includes('tulpn') || c.includes('tlnp'))) ||
-                 (c.includes('netstat') && (c.includes('4444') || c.includes('tulpn'))) ||
-                 (c.includes('lsof') && c.includes('4444')) ||
-                 (c.includes('fuser') && c.includes('4444'));
-        },
-        output: [
-          {t:'dim',    v:'$ sudo ss -tulpn | grep 4444'},
-          {t:'warn',   v:'tcp  LISTEN  0  128  0.0.0.0:4444  0.0.0.0:*  users:(("nc",pid=6631,fd=3))'},
-          {t:'warn',   v:'⚠ netcat (nc) is the listener — textbook backdoor setup'},
-          {t:'warn',   v:'⚠ Active session: 185.220.101.8 (confirmed TOR exit node)'},
-          {t:'dim',    v:'PID: 6631  |  Owner: root  |  Binary: /usr/bin/nc'},
-        ],
-        reward: 150,
-      },
-      {
-        instruction: "Kill the backdoor process (PID 6631). Cut the attacker's shell immediately.",
-        hint: "sudo kill -9 6631",
-        isValid: cmd => {
-          const c = cmd.toLowerCase();
-          return (c.includes('kill') && c.includes('6631')) ||
-                 (c.includes('pkill') && (c.includes(' nc') || c.includes('netcat')));
-        },
-        output: [
-          {t:'dim',    v:'$ sudo kill -9 6631'},
-          {t:'success',v:'✓ Process 6631 (nc) terminated'},
-          {t:'success',v:'✓ Backdoor session severed — attacker disconnected'},
-          {t:'warn',   v:'⚠ Warning: check for persistence — backdoor may auto-restart'},
-        ],
-        reward: 200,
-      },
-      {
-        instruction: "Hunt for a persistence mechanism — check cron jobs that might revive the backdoor.",
-        hint: "sudo crontab -l -u root",
-        isValid: cmd => {
-          const c = cmd.toLowerCase();
-          return c.includes('crontab') ||
-                 (c.includes('ls') && c.includes('cron')) ||
-                 (c.includes('cat') && c.includes('cron')) ||
-                 c.includes('systemctl list') ||
-                 (c.includes('find') && c.includes('cron'));
-        },
-        output: [
-          {t:'dim',    v:'$ sudo crontab -l -u root'},
-          {t:'warn',   v:'*/5 * * * * /bin/bash -c "nc -lvp 4444 -e /bin/bash" &>/dev/null'},
-          {t:'warn',   v:'⚠ PERSISTENCE FOUND: Backdoor set to restart every 5 minutes!'},
-          {t:'dim',    v:'$ sudo crontab -r -u root'},
-          {t:'success',v:'✓ Malicious cron job removed. Backdoor cannot restart.'},
-        ],
-        reward: 250,
-      },
-    ]
-  },
+  <!-- ===================== MISSED REVIEW ===================== -->
+  <section class="view" id="view-missed-review">
+    <div class="boot-line">&gt; REVIEW QUEUE LOADED<span class="cursor">█</span></div>
+    <h1 class="view-title">// MISSED REVIEW</h1>
+    <div class="panel wide">
+      <div class="panel-label">[QUEUE] missed_items</div>
+      <div id="missed-count-line" class="muted small">--</div>
+    </div>
+    <div class="card-stage" id="missed-stage">
+      <div class="study-card">
+        <div class="card-meta">
+          <span class="badge" id="missed-type">--</span>
+          <span class="card-count" id="missed-pos">0 / 0</span>
+        </div>
+        <div class="card-prompt" id="missed-prompt">Your review queue is empty. Get some questions wrong first :)</div>
+        <div class="card-answer hidden" id="missed-answer"></div>
+      </div>
+      <div class="card-controls">
+        <button class="ctrl-btn cyan-btn" id="missed-reveal">&gt; REVEAL [SPACE]</button>
+        <button class="ctrl-btn green-btn" id="missed-pass" disabled>&gt; GOT IT — REMOVE [1]</button>
+        <button class="ctrl-btn red-btn" id="missed-keep" disabled>&gt; STILL MISSED [2]</button>
+        <button class="ctrl-btn amber-btn" id="missed-next">&gt; NEXT [ENTER]</button>
+      </div>
+      <button class="danger-btn" id="clear-missed">&gt; CLEAR ENTIRE REVIEW QUEUE</button>
+    </div>
+  </section>
 
-  {
-    id: "SIR-004",
-    title: "Unauthorized SSH Key Injection",
-    severity: "HIGH",
-    reward: 350,
-    briefing: `Git-hooks audit flagged unauthorized write to <span class="hl">/root/.ssh/authorized_keys</span> 43 minutes ago. An unknown public key was injected, granting the attacker <span class="hl">passwordless root SSH access</span>. Remove it before they return.`,
-    steps: [
-      {
-        instruction: "Inspect the authorized_keys file to identify the rogue key.",
-        hint: "sudo cat /root/.ssh/authorized_keys",
-        isValid: cmd => {
-          const c = cmd.toLowerCase();
-          return (c.includes('authorized_keys') && (c.includes('cat') || c.includes('less') || c.includes('nano') || c.includes('vi') || c.includes('grep'))) ||
-                 (c.includes('ls') && c.includes('.ssh'));
-        },
-        output: [
-          {t:'dim',    v:'$ sudo cat /root/.ssh/authorized_keys'},
-          {t:'dim',    v:'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA... admin@company.com  # legitimate'},
-          {t:'warn',   v:'ssh-rsa AAAAB3NzaC1yc2EAAAADAQAB... root@attacker-kali  # UNAUTHORIZED'},
-          {t:'warn',   v:'⚠ 2 keys found. Rogue key added 43 minutes ago from 185.220.101.8'},
-        ],
-        reward: 150,
-      },
-      {
-        instruction: "Remove only the unauthorized key. The legitimate company key must remain.",
-        hint: "sudo sed -i '/root@attacker-kali/d' /root/.ssh/authorized_keys",
-        isValid: cmd => {
-          const c = cmd.toLowerCase();
-          return (c.includes('authorized_keys') && (c.includes('sed') || c.includes('>') || c.includes('echo'))) ||
-                 (c.includes('sed') && c.includes('attacker')) ||
-                 (c.includes('nano') && c.includes('authorized_keys')) ||
-                 (c.includes('vi') && c.includes('authorized_keys'));
-        },
-        output: [
-          {t:'dim',    v:"$ sudo sed -i '/root@attacker-kali/d' /root/.ssh/authorized_keys"},
-          {t:'success',v:'✓ Unauthorized key removed'},
-          {t:'dim',    v:'$ sudo cat /root/.ssh/authorized_keys'},
-          {t:'success',v:'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA... admin@company.com  # only legitimate key remains'},
-          {t:'success',v:'✓ Root SSH access secured. Unauthorized entry point closed.'},
-        ],
-        reward: 200,
-      },
-    ]
-  },
+</main>
 
-  {
-    id: "SIR-005",
-    title: "DDoS Connection Flood",
-    severity: "CRITICAL",
-    reward: 700,
-    briefing: `Web server under attack. <span class="hl">18,000+ simultaneous TCP connections</span> are incoming. Server response time degraded by 900%. Multiple source IPs detected — possible <span class="hl">SYN flood / HTTP botnet</span>. Service nearly unreachable.`,
-    steps: [
-      {
-        instruction: "Count connections by source IP to identify the top attacking addresses.",
-        hint: "netstat -ntu | awk '{print $5}' | cut -d: -f1 | sort | uniq -c | sort -rn | head -10",
-        isValid: cmd => {
-          const c = cmd.toLowerCase();
-          return (c.includes('netstat') && (c.includes('uniq') || c.includes('sort') || c.includes('awk') || c.includes('ntu'))) ||
-                 (c.includes('ss') && (c.includes('state') || c.includes('established'))) ||
-                 c.includes('uniq -c') ||
-                 (c.includes('netstat') && c.includes('-n'));
-        },
-        output: [
-          {t:'dim',    v:"$ netstat -ntu | awk '{print $5}' | cut -d: -f1 | sort | uniq -c | sort -rn | head"},
-          {t:'warn',   v:'   4231  185.220.101.8'},
-          {t:'warn',   v:'   3892  185.220.101.9'},
-          {t:'warn',   v:'   3547  91.108.56.22'},
-          {t:'warn',   v:'   2918  91.108.56.23'},
-          {t:'dim',    v:'   ... 47 more attack IPs detected'},
-          {t:'warn',   v:'⚠ 18,247 total connections — coordinated botnet confirmed'},
-        ],
-        reward: 200,
-      },
-      {
-        instruction: "Apply connection-limit rate limiting with iptables on ports 80 and 443.",
-        hint: "sudo iptables -A INPUT -p tcp --dport 80 -m connlimit --connlimit-above 50 -j DROP",
-        isValid: cmd => {
-          const c = cmd.toLowerCase();
-          return (c.includes('iptables') && (c.includes('connlimit') || c.includes('hashlimit') || c.includes('limit'))) ||
-                 (c.includes('iptables') && (c.includes('drop') || c.includes('reject')) && (c.includes('dport') || c.includes('80') || c.includes('443'))) ||
-                 (c.includes('ufw') && c.includes('limit'));
-        },
-        output: [
-          {t:'dim',    v:'$ sudo iptables -A INPUT -p tcp --dport 80  -m connlimit --connlimit-above 50 -j DROP'},
-          {t:'dim',    v:'$ sudo iptables -A INPUT -p tcp --dport 443 -m connlimit --connlimit-above 50 -j DROP'},
-          {t:'success',v:'✓ Rate limiting active: max 50 connections/IP on ports 80 & 443'},
-          {t:'success',v:'✓ Connection count: 18,247 → 4,891 → 1,203 and dropping'},
-        ],
-        reward: 250,
-      },
-      {
-        instruction: "Block the top-volume attack IPs with explicit DROP rules.",
-        hint: "sudo iptables -A INPUT -s 185.220.101.8 -j DROP",
-        isValid: cmd => {
-          const c = cmd.toLowerCase();
-          return (c.includes('iptables') && (c.includes('185.220.101') || c.includes('91.108.56')) && c.includes('drop')) ||
-                 (c.includes('ufw') && c.includes('deny') && (c.includes('185.') || c.includes('91.'))) ||
-                 c.includes('ipset') ||
-                 (c.includes('iptables') && c.includes('blacklist'));
-        },
-        output: [
-          {t:'dim',    v:'$ for ip in 185.220.101.8 185.220.101.9 91.108.56.22 91.108.56.23; do'},
-          {t:'dim',    v:'    sudo iptables -A INPUT -s $ip -j DROP'},
-          {t:'dim',    v:'  done'},
-          {t:'success',v:'✓ 4 primary attack IPs blocked at firewall'},
-          {t:'success',v:'✓ Server response time: 9,200ms → 240ms → NORMAL'},
-          {t:'success',v:'✓ DDoS neutralized. Service fully restored.'},
-        ],
-        reward: 250,
-      },
-    ]
-  },
-];
+<footer class="terminal-footer">
+  <span>&gt; SOC_TERMINAL v1.0 // localStorage backend // no telemetry // <span class="cursor">█</span></span>
+</footer>
 
-// ═══════════════════════════════════════════════════════
-// STATE
-// ═══════════════════════════════════════════════════════
-let G = {
-  money: 0,
-  si: 0,   // scenario index
-  step: 0, // step index
-  hintsUsed: 0,
-  hintShown: false,
-  resolved: [],
-  cmdHistory: [],
-  histIdx: -1,
-  active: false,
-};
-
-// ═══════════════════════════════════════════════════════
-// HELPERS
-// ═══════════════════════════════════════════════════════
-const $  = id => document.getElementById(id);
-const sc = ()  => SCENARIOS[G.si];
-const st = ()  => sc().steps[G.step];
-
-function addLine(type, html) {
-  const term = $('terminal');
-  const p = document.createElement('p');
-  p.className = `tl tl-${type}`;
-  p.innerHTML = html;
-  term.appendChild(p);
-  term.scrollTop = term.scrollHeight;
-}
-
-function addBlank() {
-  $('terminal').appendChild(document.createElement('br'));
-}
-
-function typeLines(lines, delayMs, done) {
-  let i = 0;
-  (function next() {
-    if (i >= lines.length) { done && done(); return; }
-    const ln = lines[i++];
-    addLine(ln.t, ln.v);
-    setTimeout(next, delayMs);
-  })();
-}
-
-function flashMoney(amount) {
-  G.money += amount;
-  const el = $('s-money');
-  el.textContent = '$' + G.money.toLocaleString();
-  el.style.color = '#fff';
-  setTimeout(() => { el.style.color = ''; }, 400);
-}
-
-function updateStats() {
-  $('s-incs').textContent  = G.resolved.length + ' / 5';
-  $('s-hints').textContent = G.hintsUsed;
-}
-
-// ═══════════════════════════════════════════════════════
-// GAME FLOW
-// ═══════════════════════════════════════════════════════
-function startGame() {
-  $('welcome').style.display = 'none';
-  G.active = true;
-
-  addLine('system', '══════════════════════════════════════════════');
-  addLine('success', '  CYBERDEF TERMINAL v2.4.1 — AUTHENTICATED');
-  addLine('system', '══════════════════════════════════════════════');
-  addLine('dim', '  Operator: defender  |  Clearance: ALPHA');
-  addLine('dim', '  ' + new Date().toUTCString());
-  addBlank();
-  addLine('system', '  5 active security incidents queued for immediate response.');
-  addLine('warn',   '  THREAT LEVEL: CRITICAL — do not delay.');
-  addBlank();
-  $('cmd-input').focus();
-  setTimeout(() => loadScenario(0), 1200);
-}
-
-function loadScenario(idx) {
-  if (idx >= SCENARIOS.length) { endGame(); return; }
-  G.si = idx; G.step = 0; G.hintShown = false;
-
-  const s = sc();
-
-  // Alert banner
-  $('alert-banner').style.display = 'block';
-  $('a-sid').textContent   = s.id + ' //';
-  $('a-title').textContent = s.title;
-  $('a-body').innerHTML    = s.briefing;
-
-  addLine('warn', '━━━ INCOMING INCIDENT ━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-  addLine('warn', `  [${s.id}]  ${s.title.toUpperCase()}`);
-  addLine('warn', `  SEVERITY: ${s.severity}   |   BOUNTY: $${s.reward}`);
-  addLine('warn', '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-  addBlank();
-  addLine('output', '  ' + s.briefing.replace(/<[^>]+>/g, ''));
-  addBlank();
-
-  renderMissionPanel();
-  promptStep();
-}
-
-function promptStep() {
-  const step = st();
-  addLine('dim', `  ▶ STEP ${G.step + 1} / ${sc().steps.length}:  ${step.instruction}`);
-  addBlank();
-  renderMissionPanel();
-}
-
-function renderMissionPanel() {
-  const s = sc();
-  $('mission-title').textContent = s.title;
-  $('mission-meta').textContent  = `Bounty: $${s.reward}   |   Incident ${G.si + 1} / 5`;
-
-  const pct = (G.step / s.steps.length) * 100;
-  $('step-prog').style.width = pct + '%';
-
-  const list = $('step-list');
-  list.innerHTML = '';
-  s.steps.forEach((stp, i) => {
-    const status = i < G.step ? 'done' : i === G.step ? 'active' : 'pending';
-    const icon   = status === 'done' ? '✓' : status === 'active' ? '▶' : '○';
-    const div    = document.createElement('div');
-    div.className = `step-item ${status}`;
-    div.innerHTML = `<div class="step-num">${icon} STEP ${i + 1}</div>${stp.instruction}`;
-    list.appendChild(div);
-  });
-
-  // Reset hint
-  $('hint-box').style.display = 'none';
-  $('hint-box').textContent   = '';
-  G.hintShown = false;
-}
-
-function processCommand(raw) {
-  const cmd = raw.trim();
-  if (!cmd) return;
-
-  G.cmdHistory.unshift(cmd);
-  G.histIdx = -1;
-  addLine('prompt', `defender@cyberdef:~$ ${cmd}`);
-
-  if (!G.active) return;
-
-  // Check built-in educational commands regardless of step
-  if (cmd === 'help') {
-    addLine('system', '  Available: grep, journalctl, last, ss, netstat, lsof, iptables, ufw, fail2ban-client, ps, kill, pkill, find, crontab, who, w, usermod — see the DOCS tab for details.');
-    addBlank();
-    return;
-  }
-
-  if (st().isValid(cmd)) {
-    typeLines(st().output, 48, () => {
-      addBlank();
-      flashMoney(st().reward);
-      addLine('success', `  ✓  +$${st().reward} BOUNTY EARNED`);
-      addBlank();
-      G.step++;
-      if (G.step >= sc().steps.length) {
-        setTimeout(resolveIncident, 500);
-      } else {
-        setTimeout(promptStep, 400);
-      }
-    });
-  } else {
-    addLine('error', '  ✗  Command not effective against this threat vector.');
-    addLine('dim',   '  Check the DOCS tab for relevant tools, or tap "REQUEST HINT".');
-    addBlank();
-  }
-}
-
-function resolveIncident() {
-  const s = sc();
-  addLine('success', '╔═══════════════════════════════════════════╗');
-  addLine('success', `  INCIDENT ${s.id} — RESOLVED`);
-  addLine('success', '╚═══════════════════════════════════════════╝');
-  addBlank();
-
-  G.resolved.push({ id: s.id, title: s.title, reward: s.reward });
-  updateStats();
-  pushHistory(s);
-
-  $('alert-banner').style.display = 'none';
-  $('step-prog').style.width = '100%';
-
-  const next = G.si + 1;
-  if (next < SCENARIOS.length) {
-    setTimeout(() => {
-      addLine('system', `  Loading next incident (${next + 1} / 5) ...`);
-      addBlank();
-      setTimeout(() => loadScenario(next), 1200);
-    }, 900);
-  } else {
-    setTimeout(endGame, 1600);
-  }
-}
-
-function pushHistory(s) {
-  const list = $('history-list');
-  const empty = list.querySelector('.history-empty');
-  if (empty) empty.remove();
-
-  const div = document.createElement('div');
-  div.className = 'history-item done';
-  div.innerHTML = `
-    <div class="history-id">${s.id}</div>
-    <div class="history-title">✓ ${s.title}</div>
-    <div class="history-earn">$${s.reward} earned</div>
-  `;
-  list.appendChild(div);
-}
-
-function endGame() {
-  G.active = false;
-  const noHints = G.hintsUsed === 0;
-  $('go-score').textContent = 'TOTAL BOUNTY: $' + G.money.toLocaleString();
-  $('go-detail').innerHTML  =
-    `Incidents Resolved: ${G.resolved.length} / 5<br>` +
-    `Hints Used: ${G.hintsUsed}<br>` +
-    (noHints ? '<br>⭐ FLAWLESS — No hints required!' : '');
-  $('gameover').classList.add('show');
-}
-
-function resetGame() {
-  G = { money:0, si:0, step:0, hintsUsed:0, hintShown:false, resolved:[], cmdHistory:[], histIdx:-1, active:false };
-  $('gameover').classList.remove('show');
-  $('terminal').innerHTML = '<p class="tl tl-dim">Initializing CYBERDEF terminal v2.4.1 ...</p>';
-  $('s-money').textContent = '$0';
-  $('s-incs').textContent  = '0 / 5';
-  $('s-hints').textContent = '0';
-  $('alert-banner').style.display = 'none';
-  $('history-list').innerHTML = '<p class="history-empty">No incidents resolved yet.</p>';
-  $('step-list').innerHTML = '';
-  $('mission-title').textContent = '';
-  $('mission-meta').textContent  = '';
-  setTimeout(startGame, 400);
-}
-
-function useHint() {
-  if (G.hintShown) return;
-  G.hintsUsed++;
-  G.hintShown = true;
-  updateStats();
-  const hint = st().hint;
-  const box  = $('hint-box');
-  box.textContent   = '💡 ' + hint;
-  box.style.display = 'block';
-  addLine('warn', `  💡 Hint: ${hint}`);
-  addBlank();
-}
-
-// ═══════════════════════════════════════════════════════
-// INPUT
-// ═══════════════════════════════════════════════════════
-const input = $('cmd-input');
-
-input.addEventListener('keydown', e => {
-  if (e.key === 'Enter') {
-    const v = input.value;
-    input.value = '';
-    processCommand(v);
-  } else if (e.key === 'ArrowUp') {
-    e.preventDefault();
-    if (G.histIdx < G.cmdHistory.length - 1) {
-      G.histIdx++;
-      input.value = G.cmdHistory[G.histIdx] || '';
-    }
-  } else if (e.key === 'ArrowDown') {
-    e.preventDefault();
-    G.histIdx = Math.max(-1, G.histIdx - 1);
-    input.value = G.histIdx >= 0 ? G.cmdHistory[G.histIdx] : '';
-  }
-});
-
-document.addEventListener('click', e => {
-  if (!e.target.closest('button') && !e.target.closest('.panel-tab')) input.focus();
-});
-
-// ═══════════════════════════════════════════════════════
-// TABS
-// ═══════════════════════════════════════════════════════
-function switchTab(name, el) {
-  document.querySelectorAll('.panel-tab').forEach(t => t.classList.remove('active'));
-  document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
-  el.classList.add('active');
-  $(`tab-${name}`).classList.add('active');
-}
-</script>
+<script src="script.js"></script>
 </body>
 </html>
